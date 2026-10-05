@@ -928,13 +928,92 @@ recurrence.to_csv(
 # Monthly attack table
 # ------------------------------------------------------------
 
-monthly_attack_table.to_csv(
+monthly_attack_table.reset_index().to_csv(
     os.path.join(
         OUTPUT_PATH,
         "monthly_attack_table.csv"
     ),
     index=False
 )
+
+# ============================================================
+# 20A. MONTHLY ATTACK PROFILE
+# ============================================================
+
+if (
+    "label" in df_processed.columns
+    and
+    "attack_type" in df_processed.columns
+):
+
+    monthly_attack_profile = (
+        df_processed[
+            df_processed["label"] == 1
+        ]
+        .groupby(
+            ["month", "attack_type"]
+        )
+        .size()
+        .reset_index(
+            name="attack_count"
+        )
+    )
+
+    monthly_totals = (
+        monthly_attack_profile
+        .groupby("month")["attack_count"]
+        .sum()
+        .reset_index(
+            name="total_month_attacks"
+        )
+    )
+
+    monthly_attack_profile = (
+        monthly_attack_profile
+        .merge(
+            monthly_totals,
+            on="month",
+            how="left"
+        )
+    )
+
+    monthly_attack_profile[
+        "attack_share_pct"
+    ] = (
+        monthly_attack_profile[
+            "attack_count"
+        ]
+        /
+        monthly_attack_profile[
+            "total_month_attacks"
+        ]
+        * 100
+    ).round(2)
+
+    monthly_attack_profile = (
+        monthly_attack_profile
+        .sort_values(
+            [
+                "month",
+                "attack_count"
+            ],
+            ascending=[
+                True,
+                False
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+    monthly_attack_profile.to_csv(
+        os.path.join(
+            OUTPUT_PATH,
+            "monthly_attack_profile.csv"
+        ),
+        index=False
+    )
 
 
 # ============================================================
