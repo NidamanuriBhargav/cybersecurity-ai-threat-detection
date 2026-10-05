@@ -5,10 +5,12 @@
 import os
 import pandas as pd
 
+
 from validator import (
     validate_dataset,
     print_validation_report
 )
+
 
 from schema_mapper import (
     detect_column_mapping,
@@ -17,15 +19,18 @@ from schema_mapper import (
     print_mapping_report
 )
 
+
 from preprocessing import (
     engineer_features
 )
+
 
 from clustering import (
     prepare_clustering_features,
     scale_features,
     apply_dbscan
 )
+
 
 from analysis import (
     add_month_column,
@@ -50,6 +55,7 @@ PROJECT_ROOT = os.path.dirname(
     )
 )
 
+
 DATA_PATH = os.path.join(
     PROJECT_ROOT,
     "data",
@@ -57,11 +63,13 @@ DATA_PATH = os.path.join(
     "cybersecurity.csv"
 )
 
+
 OUTPUT_PATH = os.path.join(
     PROJECT_ROOT,
     "outputs",
     "reports"
 )
+
 
 PROCESSED_PATH = os.path.join(
     PROJECT_ROOT,
@@ -69,10 +77,12 @@ PROCESSED_PATH = os.path.join(
     "processed"
 )
 
+
 os.makedirs(
     OUTPUT_PATH,
     exist_ok=True
 )
+
 
 os.makedirs(
     PROCESSED_PATH,
@@ -94,6 +104,7 @@ print("=" * 60)
 # ============================================================
 
 print("\nLoading raw dataset...")
+
 
 try:
 
@@ -125,15 +136,10 @@ print("STEP 1: SCHEMA DETECTION")
 print("-" * 60)
 
 
-# detect_column_mapping() expects the complete DataFrame.
-
 mapping = detect_column_mapping(
     raw_df
 )
 
-
-# print_mapping_report() expects the DataFrame
-# and the detected mapping.
 
 print_mapping_report(
     raw_df,
@@ -179,6 +185,7 @@ standardized_df = apply_column_mapping(
 print(
     "\nStandardized dataset columns:"
 )
+
 
 print(
     standardized_df.columns.tolist()
@@ -278,6 +285,7 @@ print(
 print(
     "\nClustering features:"
 )
+
 
 print(
     X.columns.tolist()
@@ -449,7 +457,402 @@ behavior_summary = (
 
 
 # ============================================================
-# 18. DETAILED THREAT REPORT
+# 18. CREATE FINAL THREAT PATTERN LIBRARY
+# ============================================================
+
+print(
+    "\nCreating final threat pattern library..."
+)
+
+
+if not threat_pattern_library.empty:
+
+    # --------------------------------------------------------
+    # Calculate behavioral metrics directly from the
+    # processed attack records.
+    #
+    # We do this here instead of depending on specific column
+    # names returned by create_behavior_profile().
+    # --------------------------------------------------------
+
+    if (
+        "label" in df_processed.columns
+        and "attack_type" in df_processed.columns
+    ):
+
+        behavior_data = df_processed[
+            df_processed["final_cluster"].isin(
+                recurring_clusters
+            )
+            &
+            (df_processed["label"] == 1)
+        ].copy()
+
+    else:
+
+        behavior_data = df_processed[
+            df_processed["final_cluster"].isin(
+                recurring_clusters
+            )
+        ].copy()
+
+
+    if not behavior_data.empty:
+
+        behavior_metrics = (
+            behavior_data
+            .groupby("final_cluster")
+            .agg(
+                attack_records=(
+                    "final_cluster",
+                    "size"
+                ),
+
+                avg_bytes_sent=(
+                    "bytes_sent",
+                    "mean"
+                ),
+
+                avg_bytes_received=(
+                    "bytes_received",
+                    "mean"
+                ),
+
+                avg_bytes_ratio=(
+                    "bytes_ratio",
+                    "mean"
+                ),
+
+                internal_traffic_rate=(
+                    "internal_code",
+                    "mean"
+                ),
+
+                sensitive_url_rate=(
+                    "has_sensitive_keyword",
+                    "mean"
+                ),
+
+                browser_rate=(
+                    "is_browser",
+                    "mean"
+                ),
+
+                query_parameter_rate=(
+                    "has_query_params",
+                    "mean"
+                )
+            )
+            .reset_index()
+        )
+
+    else:
+
+        behavior_metrics = pd.DataFrame(
+            columns=[
+                "final_cluster",
+                "attack_records",
+                "avg_bytes_sent",
+                "avg_bytes_received",
+                "avg_bytes_ratio",
+                "internal_traffic_rate",
+                "sensitive_url_rate",
+                "browser_rate",
+                "query_parameter_rate"
+            ]
+        )
+
+
+    # --------------------------------------------------------
+    # Create human-readable behavioral indicators.
+    # --------------------------------------------------------
+
+    indicators_list = []
+
+
+    if not behavior_metrics.empty:
+
+        median_sent = (
+            behavior_metrics[
+                "avg_bytes_sent"
+            ].median()
+        )
+
+
+        median_received = (
+            behavior_metrics[
+                "avg_bytes_received"
+            ].median()
+        )
+
+
+        for _, row in behavior_metrics.iterrows():
+
+            indicators = []
+
+
+            if (
+                row["sensitive_url_rate"]
+                >= 0.75
+            ):
+
+                indicators.append(
+                    "High sensitive-URL activity"
+                )
+
+
+            if (
+                row["query_parameter_rate"]
+                >= 0.75
+            ):
+
+                indicators.append(
+                    "High query-parameter activity"
+                )
+
+
+            if (
+                row["browser_rate"]
+                >= 0.75
+            ):
+
+                indicators.append(
+                    "Browser-based traffic"
+                )
+
+
+            if (
+                row["internal_traffic_rate"]
+                >= 0.75
+            ):
+
+                indicators.append(
+                    "Internal traffic"
+                )
+
+
+            if (
+                row["internal_traffic_rate"]
+                <= 0.25
+            ):
+
+                indicators.append(
+                    "External traffic"
+                )
+
+
+            if (
+                row["avg_bytes_received"]
+                > median_received
+            ):
+
+                indicators.append(
+                    "Higher received traffic"
+                )
+
+
+            if (
+                row["avg_bytes_sent"]
+                > median_sent
+            ):
+
+                indicators.append(
+                    "Higher sent traffic"
+                )
+
+
+            indicators_list.append(
+                {
+                    "final_cluster":
+                        row["final_cluster"],
+
+                    "indicators":
+                        ", ".join(indicators)
+                }
+            )
+
+
+    indicators_df = pd.DataFrame(
+        indicators_list
+    )
+
+
+    # --------------------------------------------------------
+    # Human-readable names for the recurring patterns.
+    # --------------------------------------------------------
+
+    pattern_names = {
+
+        2:
+            "Recurring Multi-Type External Browser Threat",
+
+        3:
+            "Recurring High-Volume External Threat",
+
+        0:
+            "External Web Request Attack Pattern",
+
+        9:
+            "External Non-Browser Web Attack Pattern",
+
+        5:
+            "Recurring High-Volume Browser Threat",
+
+        4:
+            "Internal Browser Threat Pattern",
+
+        15:
+            "Internal High-Volume Threat Pattern",
+
+        10:
+            "External Browser Web Threat Pattern",
+
+        1:
+            "Recurring External Network Threat",
+
+        7:
+            "Internal Browser Web Attack Pattern"
+    }
+
+
+    pattern_name_df = pd.DataFrame(
+        [
+            {
+                "final_cluster": cluster_id,
+                "pattern_name": pattern_names.get(
+                    cluster_id,
+                    "Recurring Threat Pattern"
+                )
+            }
+
+            for cluster_id
+            in recurring_clusters
+        ]
+    )
+
+
+    # --------------------------------------------------------
+    # Combine the recurrence information with behavioral
+    # metrics, indicators and human-readable names.
+    # --------------------------------------------------------
+
+    final_threat_pattern_library = (
+        threat_pattern_library.copy()
+    )
+
+
+    final_threat_pattern_library = (
+        final_threat_pattern_library
+        .merge(
+            pattern_name_df,
+            on="final_cluster",
+            how="left"
+        )
+    )
+
+
+    if not behavior_metrics.empty:
+
+        final_threat_pattern_library = (
+            final_threat_pattern_library
+            .merge(
+                behavior_metrics[
+                    [
+                        "final_cluster",
+                        "attack_records",
+                        "avg_bytes_sent",
+                        "avg_bytes_received",
+                        "avg_bytes_ratio",
+                        "internal_traffic_rate",
+                        "sensitive_url_rate",
+                        "browser_rate",
+                        "query_parameter_rate"
+                    ]
+                ],
+                on="final_cluster",
+                how="left"
+            )
+        )
+
+
+    if not indicators_df.empty:
+
+        final_threat_pattern_library = (
+            final_threat_pattern_library
+            .merge(
+                indicators_df,
+                on="final_cluster",
+                how="left"
+            )
+        )
+
+
+    # --------------------------------------------------------
+    # Reorder columns for a clean final report.
+    # --------------------------------------------------------
+
+    preferred_columns = [
+
+        "final_cluster",
+
+        "pattern_name",
+
+        "recurring_attack_types",
+
+        "total_recurring_attacks",
+
+        "recurring_pattern_count",
+
+        "max_months_present",
+
+        "indicators",
+
+        "attack_records",
+
+        "avg_bytes_sent",
+
+        "avg_bytes_received",
+
+        "avg_bytes_ratio",
+
+        "internal_traffic_rate",
+
+        "sensitive_url_rate",
+
+        "browser_rate",
+
+        "query_parameter_rate"
+    ]
+
+
+    available_columns = [
+        column
+        for column in preferred_columns
+        if column in final_threat_pattern_library.columns
+    ]
+
+
+    final_threat_pattern_library = (
+        final_threat_pattern_library[
+            available_columns
+        ]
+        .sort_values(
+            "total_recurring_attacks",
+            ascending=False
+        )
+        .reset_index(drop=True)
+    )
+
+
+else:
+
+    final_threat_pattern_library = (
+        threat_pattern_library.copy()
+    )
+
+
+# ============================================================
+# 19. DETAILED THREAT REPORT
 # ============================================================
 
 detailed_report = (
@@ -461,13 +864,17 @@ detailed_report = (
 
 
 # ============================================================
-# 19. SAVE OUTPUTS
+# 20. SAVE OUTPUTS
 # ============================================================
 
 print("\n" + "-" * 60)
 print("STEP 8: SAVING OUTPUTS")
 print("-" * 60)
 
+
+# ------------------------------------------------------------
+# Original threat pattern library
+# ------------------------------------------------------------
 
 threat_pattern_library.to_csv(
     os.path.join(
@@ -478,6 +885,23 @@ threat_pattern_library.to_csv(
 )
 
 
+# ------------------------------------------------------------
+# Final enriched threat pattern library
+# ------------------------------------------------------------
+
+final_threat_pattern_library.to_csv(
+    os.path.join(
+        OUTPUT_PATH,
+        "final_threat_pattern_library.csv"
+    ),
+    index=False
+)
+
+
+# ------------------------------------------------------------
+# Detailed threat report
+# ------------------------------------------------------------
+
 detailed_report.to_csv(
     os.path.join(
         OUTPUT_PATH,
@@ -487,37 +911,57 @@ detailed_report.to_csv(
 )
 
 
+# ------------------------------------------------------------
+# Monthly recurrence
+# ------------------------------------------------------------
+
 recurrence.to_csv(
     os.path.join(
         OUTPUT_PATH,
         "monthly_recurrence.csv"
-    )
+    ),
+    index=False
 )
 
+
+# ------------------------------------------------------------
+# Monthly attack table
+# ------------------------------------------------------------
 
 monthly_attack_table.to_csv(
     os.path.join(
         OUTPUT_PATH,
         "monthly_attack_table.csv"
-    )
+    ),
+    index=False
 )
 
 
 # ============================================================
-# 20. PROJECT SUMMARY
+# 21. PROJECT SUMMARY
 # ============================================================
 
 summary_data = {
-    "total_logs": len(df_processed),
-    "total_clusters": number_of_clusters,
-    "noise_points": noise_count,
-    "recurring_clusters": len(recurring_clusters),
-    "clustering_features": X.shape[1]
+
+    "total_logs":
+        len(df_processed),
+
+    "total_clusters":
+        number_of_clusters,
+
+    "noise_points":
+        noise_count,
+
+    "recurring_clusters":
+        len(recurring_clusters),
+
+    "clustering_features":
+        X.shape[1]
 }
 
 
 # ============================================================
-# 21. ADD LABEL-BASED INFORMATION IF AVAILABLE
+# 22. ADD LABEL-BASED INFORMATION IF AVAILABLE
 # ============================================================
 
 if (
@@ -532,17 +976,20 @@ if (
         ).sum()
     )
 
+
     summary_data["total_benign"] = int(
         (
             df_processed["label"] == 0
         ).sum()
     )
 
+
     summary_data[
         "recurring_attack_patterns"
     ] = len(
         recurring_patterns
     )
+
 
     summary_data[
         "recurring_attack_types"
@@ -554,7 +1001,7 @@ if (
 
 
 # ============================================================
-# 22. SAVE PROJECT SUMMARY
+# 23. SAVE PROJECT SUMMARY
 # ============================================================
 
 project_summary = pd.DataFrame(
@@ -572,7 +1019,7 @@ project_summary.to_csv(
 
 
 # ============================================================
-# 23. SAVE PROCESSED DATASET
+# 24. SAVE PROCESSED DATASET
 # ============================================================
 
 processed_dataset_path = os.path.join(
@@ -588,27 +1035,31 @@ df_processed.to_csv(
 
 
 # ============================================================
-# 24. FINAL SUMMARY
+# 25. FINAL SUMMARY
 # ============================================================
 
 print("\n" + "=" * 60)
 print("PIPELINE COMPLETED SUCCESSFULLY")
 print("=" * 60)
 
+
 print(
     f"Total logs: "
     f"{len(df_processed)}"
 )
+
 
 print(
     f"Clusters discovered: "
     f"{number_of_clusters}"
 )
 
+
 print(
     f"Noise points: "
     f"{noise_count}"
 )
+
 
 print(
     f"Recurring clusters: "
@@ -627,6 +1078,7 @@ if (
         f"{len(recurring_patterns)}"
     )
 
+
     print(
         f"Recurring attack types: "
         f"{recurring_patterns['attack_type'].nunique()}"
@@ -644,6 +1096,7 @@ print(
     "\nReports saved to:"
 )
 
+
 print(
     OUTPUT_PATH
 )
@@ -653,8 +1106,23 @@ print(
     "\nProcessed dataset saved to:"
 )
 
+
 print(
     processed_dataset_path
 )
+
+
+print(
+    "\nFinal threat pattern library saved to:"
+)
+
+
+print(
+    os.path.join(
+        OUTPUT_PATH,
+        "final_threat_pattern_library.csv"
+    )
+)
+
 
 print("=" * 60)
