@@ -1,0 +1,11 @@
+final_cluster,recurring_attack_types,total_recurring_attacks,recurring_pattern_count,max_months_present
+2,"brute-force, c2, command-injection, credential-stuffing, ddos, exploit-attempt, port-scan, sql-injection, xss",109,9,3
+3,"brute-force, command-injection, credential-stuffing, exploit-attempt, port-scan, sql-injection, xss",72,7,3
+0,"brute-force, exploit-attempt, port-scan, sql-injection, xss",42,5,3
+9,"brute-force, command-injection, sql-injection, xss",24,4,3
+5,"brute-force, credential-stuffing, port-scan",17,3,3
+4,"brute-force, port-scan",10,2,3
+15,"sql-injection, xss",10,2,3
+10,"brute-force, port-scan",7,2,3
+1,"port-scan, sql-injection",6,2,3
+7,brute-force,3,1,2

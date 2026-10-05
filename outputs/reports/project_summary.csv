@@ -1,0 +1,2 @@
+total_logs,total_clusters,noise_points,recurring_clusters,clustering_features,total_attacks,total_benign,recurring_attack_patterns,recurring_attack_types
+10000,17,779,10,16,400,9600,37,9
